@@ -28,7 +28,7 @@ type GraphDefinitionRequest struct {
 	Type               *string                      `json:"type,omitempty"`
 	Style              *GraphDefinitionRequestStyle `json:"style,omitempty"`
 
-	// For change type graphs
+	// // For change type graphs
 	ChangeType     *string                            `json:"change_type,omitempty"`
 	OrderDirection *string                            `json:"order_dir,omitempty"`
 	CompareTo      *string                            `json:"compare_to,omitempty"`
@@ -37,7 +37,7 @@ type GraphDefinitionRequest struct {
 	ExtraCol       *string                            `json:"extra_col,omitempty"`
 	Metadata       map[string]GraphDefinitionMetadata `json:"metadata,omitempty"`
 
-	// A Graph can only have one of these types of query.
+	// // A Graph can only have one of these types of query.
 	Query        *string             `json:"q,omitempty"`
 	LogQuery     *GraphApmOrLogQuery `json:"log_query,omitempty"`
 	ApmQuery     *GraphApmOrLogQuery `json:"apm_query,omitempty"`
@@ -104,6 +104,7 @@ type Yaxis struct {
 	Scale        *string  `json:"scale,omitempty"`
 	IncludeZero  *bool    `json:"includeZero,omitempty"`
 	IncludeUnits *bool    `json:"units,omitempty"`
+	Label        string   `json:"label,omitempty"`
 }
 
 // UnmarshalJSON is a Custom Unmarshal for Yaxis.Min/Yaxis.Max. If the datadog API
@@ -159,13 +160,25 @@ type Style struct {
 }
 
 type GraphDefinition struct {
-	Viz      *string                  `json:"viz,omitempty"`
-	Requests []GraphDefinitionRequest `json:"requests,omitempty"`
-	Events   []GraphEvent             `json:"events,omitempty"`
-	Markers  []GraphDefinitionMarker  `json:"markers,omitempty"`
+	Viz                 *string                  `json:"viz,omitempty"`
+	RequestsRawMessage  json.RawMessage          `json:"requests,omitempty"`
+	Requests            []GraphDefinitionRequest `json:"-"`
+	ScatterplotRequests struct {
+		Y struct {
+			Q          string `json:"q"`
+			Aggregator string `json:"aggregator"`
+		} `json:"y"`
+		X struct {
+			Q          string `json:"q"`
+			Aggregator string `json:"aggregator"`
+		} `json:"x"`
+	} `json:"-"`
+	Events  []GraphEvent            `json:"events,omitempty"`
+	Markers []GraphDefinitionMarker `json:"markers,omitempty"`
 
 	// For timeseries type graphs
 	Yaxis Yaxis `json:"yaxis,omitempty"`
+	Xaxis Yaxis `json:"xaxis,omitempty"`
 
 	// For query value type graphs
 	Autoscale  *bool       `json:"autoscale,omitempty"`
@@ -176,10 +189,37 @@ type GraphDefinition struct {
 	// For hostmaps
 	Style                 *Style   `json:"style,omitempty"`
 	Groups                []string `json:"group,omitempty"`
+	Group                 string   `json:"group,omitempty"`
 	IncludeNoMetricHosts  *bool    `json:"noMetricHosts,omitempty"`
 	Scopes                []string `json:"scope,omitempty"`
 	IncludeUngroupedHosts *bool    `json:"noGroupHosts,omitempty"`
 	NodeType              *string  `json:"nodeType,omitempty"`
+}
+
+func (gd *GraphDefinition) UnmarshalJSON(data []byte) error {
+	type Alias GraphDefinition
+	alias := &struct {
+		*Alias
+	}{
+		Alias: (*Alias)(gd),
+	}
+
+	json.Unmarshal(data, &alias)
+
+	if len(alias.RequestsRawMessage) != 0 {
+		if *alias.Viz == "scatterplot" {
+			err := json.Unmarshal(alias.RequestsRawMessage, &alias.ScatterplotRequests)
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			err := json.Unmarshal(alias.RequestsRawMessage, &alias.Requests)
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
+	return nil
 }
 
 // Graph represents a graph that might exist on a dashboard.
