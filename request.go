@@ -143,6 +143,7 @@ func (client *Client) doJsonRequestUnredacted(method, api string,
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
+	fmt.Println(string(body))
 	if err != nil {
 		return err
 	}
@@ -222,7 +223,7 @@ func (client *Client) doRequestWithRetries(req *http.Request, maxTime time.Durat
 			return nil
 		}
 
-		return fmt.Errorf("Received HTTP status code %d", resp.StatusCode)
+		return fmt.Errorf("%s Received HTTP status code %d", *req.URL, resp.StatusCode)
 	}
 
 	err = backoff.Retry(operation, bo)

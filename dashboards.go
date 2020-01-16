@@ -11,6 +11,7 @@ package datadog
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 // GraphDefinitionRequestStyle represents the graph style attributes
@@ -247,6 +248,124 @@ type Dashboard struct {
 	ReadOnly          *bool              `json:"read_only,omitempty"`
 }
 
+// DashboardV2 represents a user created dashboard. This is the full dashboard
+// struct when we load a dashboard in detail.
+type DashboardV2 struct {
+	// NotifyList              interface{} `json:"notify_list"`
+	Description *string `json:"description,omitempty"`
+	// AuthorName              interface{} `json:"author_name,omitempty"`
+	TemplateVariablePresets []struct {
+		TemplateVariables []struct {
+			Name  *string `json:"name,omitempty"`
+			Value *string `json:"value,omitempty"`
+		} `json:"template_variables,omitempty"`
+		Name *string `json:"name,omitempty"`
+	} `json:"template_variable_presets,omitempty"`
+	TemplateVariables []struct {
+		Default *string `json:"default,omitempty"`
+		Prefix  *string `json:"prefix,omitempty"`
+		Name    *string `json:"name,omitempty"`
+	} `json:"template_variables,omitempty"`
+	IsReadOnly   *bool             `json:"is_read_only,omitempty"`
+	ID           *string           `json:"id,omitempty"`
+	Title        *string           `json:"title,omitempty"`
+	URL          *string           `json:"url,omitempty"`
+	CreatedAt    *time.Time        `json:"created_at,omitempty"`
+	ModifiedAt   *time.Time        `json:"modified_at,omitempty"`
+	AuthorHandle *string           `json:"author_handle,omitempty"`
+	Widgets      []DashboardWidget `json:"widgets,omitempty"`
+	LayoutType   *string           `json:"layout_type,omitempty"`
+}
+
+type DashboardWidget struct {
+	ID         int64             `json:"id,omitempty"`
+	Definition GraphDefinitionV2 `json:"definition,omitempty"`
+}
+
+type GraphDefinitionV2 struct {
+	Widgets            []DashboardWidget `json:"widgets,omitempty"`
+	RequestsRawMessage json.RawMessage   `json:"requests,omitempty"`
+	Requests           []struct {
+		Query       *string `json:"q,omitempty"`
+		DisplayType *string `json:"display_type,omitempty"`
+		Style       struct {
+			LineType    *string `json:"line_type,omitempty"`
+			LineWidth   *string `json:"line_width,omitempty"`
+			Palette     *string `json:"palette,omitempty"`
+			PaletteFlip bool    `json:"palette_flip"`
+		} `json:"style,omitempty"`
+		ConditionalFormats []struct {
+			Palette    *string  `json:"palette,omitempty"`
+			Value      *float64 `json:"value,omitempty"`
+			Comparator *string  `json:"comparator,omitempty"`
+		} `json:"conditional_formats,omitempty"`
+	} `json:"-"`
+	RequestsHostmap struct {
+		Size struct {
+			Query string `json:"q"`
+		} `json:"size"`
+		Fill struct {
+			Query string `json:"q"`
+		} `json	:"fill"`
+	} `json:"-"`
+	RequestsScatterplot struct {
+		Y struct {
+			Q          string `json:"q"`
+			Aggregator string `json:"aggregator"`
+		} `json:"y"`
+		X struct {
+			Q          string `json:"q"`
+			Aggregator string `json:"aggregator"`
+		} `json:"x"`
+	} `json:"-"`
+	Time struct {
+	} `json:"time,omitempty"`
+	Yaxis struct {
+		Scale *string `json:"scale,omitempty"`
+	} `json:"yaxis,omitempty"`
+	Color      *string `json:"color,omitempty"`
+	FontSize   *string `json:"font_size,omitempty"`
+	LegendSize *string `json:"legend_size,omitempty"`
+	ShowLegend bool    `json:"show_legend,omitempty"`
+	Text       *string `json:"text,omitempty"`
+	TextAlign  *string `json:"text_align,omitempty"`
+	Title      *string `json:"title,omitempty"`
+	TitleAlign *string `json:"title_align,omitempty"`
+	TitleSize  *string `json:"title_size,omitempty"`
+	Type       *string `json:"type,omitempty"`
+}
+
+func (gd *GraphDefinitionV2) UnmarshalJSON(data []byte) error {
+	type Alias GraphDefinitionV2
+	alias := &struct {
+		*Alias
+	}{
+		Alias: (*Alias)(gd),
+	}
+
+	json.Unmarshal(data, &alias)
+
+	if len(alias.RequestsRawMessage) != 0 {
+		if *alias.Type == "scatterplot" {
+			err := json.Unmarshal(alias.RequestsRawMessage, &alias.RequestsScatterplot)
+			if err != nil {
+				panic(err)
+			}
+		} else if *alias.Type == "hostmap" {
+			err := json.Unmarshal(alias.RequestsRawMessage, &alias.RequestsScatterplot)
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			err := json.Unmarshal(alias.RequestsRawMessage, &alias.Requests)
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
+	return nil
+}
+
 // DashboardLite represents a user created dashboard. This is the mini
 // struct when we load the summaries.
 type DashboardLite struct {
@@ -258,6 +377,26 @@ type DashboardLite struct {
 	Created     *string    `json:"created,omitempty"`
 	Modified    *string    `json:"modified,omitempty"`
 	CreatedBy   *CreatedBy `json:"created_by,omitempty"`
+}
+
+// DashboardLite represents a user created dashboard. This is the mini
+// struct when we load the summaries.
+type DashboardLiteV2 struct {
+	Popularity *int         `json:"popularity"`
+	Title      *string      `json:"title"`
+	IsFavorite *bool        `json:"is_favorite"`
+	ID         *json.Number `json:"id"`
+	Icon       *interface{} `json:"icon"`
+	IsShared   *bool        `json:"is_shared"`
+	Author     struct {
+		Handle *string      `json:"handle"`
+		Name   *interface{} `json:"name"`
+	} `json:"author"`
+	URL        *string    `json:"url"`
+	Created    *time.Time `json:"created"`
+	Modified   *time.Time `json:"modified"`
+	IsReadOnly *bool      `json:"is_read_only"`
+	Type       *string    `json:"type"`
 }
 
 // CreatedBy represents a field from DashboardLite.
@@ -278,12 +417,21 @@ type reqGetDashboards struct {
 	Dashboards []DashboardLite `json:"dashes,omitempty"`
 }
 
+// reqGetDashboardsV2 from /api/v1/dashboards
+type reqGetDashboardsV2 struct {
+	Total      int               `json:"total"`
+	Dashboards []DashboardLiteV2 `json:"dashboards"`
+}
+
 // reqGetDashboard from /api/v1/dash/:dashboard_id
 type reqGetDashboard struct {
 	Resource  *string    `json:"resource,omitempty"`
 	Url       *string    `json:"url,omitempty"`
 	Dashboard *Dashboard `json:"dash,omitempty"`
 }
+
+// reqGetDashboardV2 from /api/v1/dashboard/:dashboard_id
+type reqGetDashboardV2 *DashboardV2
 
 type DashboardConditionalFormat struct {
 	Palette        *string      `json:"palette,omitempty"`
@@ -310,10 +458,32 @@ func (client *Client) GetDashboard(id interface{}) (*Dashboard, error) {
 	return out.Dashboard, nil
 }
 
+// GetDashboard returns a single dashboard created on this account.
+func (client *Client) GetDashboardV2(id interface{}) (*DashboardV2, error) {
+	var out reqGetDashboardV2
+	if err := client.doJsonRequest("GET", fmt.Sprintf("/v1/dashboard/%s", id), nil, &out); err != nil {
+		// fmt.Println("err", err)
+		return nil, err
+	}
+	// fmt.Println("out", out)
+	return out, nil
+}
+
 // GetDashboards returns a list of all dashboards created on this account.
 func (client *Client) GetDashboards() ([]DashboardLite, error) {
 	var out reqGetDashboards
 	if err := client.doJsonRequest("GET", "/v1/dash", nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Dashboards, nil
+}
+
+// GetDashboardsV2 returns a list of all dashboards created on this account.
+func (client *Client) GetDashboardsV2() ([]DashboardLiteV2, error) {
+	// fmt.Println("GetDashboardsV2")
+	var out reqGetDashboardsV2
+	if err := client.doJsonRequest("GET", "/v1/dashboards", nil, &out); err != nil {
+		// fmt.Println("err", err)
 		return nil, err
 	}
 	return out.Dashboards, nil
